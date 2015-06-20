@@ -606,7 +606,8 @@ public class ResourceManagerImpl extends ManagerBase implements ResourceManager,
         return discoverHostsFull(dcId, null, null, null, url, null, null, "SecondaryStorage", null, null, false);
     }
 
-    private List<HostVO> discoverHostsFull(final Long dcId, final Long podId, Long clusterId, final String clusterName, String url, String username, String password,
+    @Override
+    public List<HostVO> discoverHostsFull(final Long dcId, final Long podId, Long clusterId, final String clusterName, String url, String username, String password,
             final String hypervisorType, final List<String> hostTags, final Map<String, String> params, final boolean deferAgentCreation) throws IllegalArgumentException, DiscoveryException,
             InvalidParameterValueException {
         URI uri = null;
@@ -1758,6 +1759,7 @@ public class ResourceManagerImpl extends ManagerBase implements ResourceManager,
     }
 
     private Host createHostAndAgent(final ServerResource resource, final Map<String, String> details, final boolean old, final List<String> hostTags, final boolean forRebalance) {
+        s_logger.info("### In creating hosts");
         HostVO host = null;
         StartupCommand[] cmds = null;
         boolean hostExists = false;
@@ -1801,6 +1803,8 @@ public class ResourceManagerImpl extends ManagerBase implements ResourceManager,
                 created = _agentMgr.handleDirectConnectAgent(host, cmds, resource, forRebalance);
                 /* reload myself from database */
                 host = _hostDao.findById(host.getId());
+            } else {
+                s_logger.info("### Host is null");
             }
         } catch (final Exception e) {
             s_logger.warn("Unable to connect due to ", e);
@@ -1818,7 +1822,7 @@ public class ResourceManagerImpl extends ManagerBase implements ResourceManager,
                 }
             }
         }
-
+        s_logger.info("### Host id: " + host.getId());
         return host;
     }
 

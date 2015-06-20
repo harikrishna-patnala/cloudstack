@@ -29,6 +29,8 @@ import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.HostPodVO;
 import com.cloud.dc.PodCluster;
 import com.cloud.exception.AgentUnavailableException;
+import com.cloud.exception.DiscoveryException;
+import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.gpu.HostGpuGroupsVO;
 import com.cloud.host.Host;
 import com.cloud.host.Host.Type;
@@ -191,4 +193,11 @@ public interface ResourceManager extends ResourceService {
      * @return Details of groupNames and enabled VGPU type with remaining capacity.
      */
     HashMap<String, HashMap<String, VgpuTypesInfo>> getGPUStatistics(HostVO host);
+
+    List<HostVO> discoverHostsFull(Long dcId, Long podId, Long clusterId,
+            String clusterName, String url, String username, String password,
+            String hypervisorType, List<String> hostTags,
+            Map<String, String> params, boolean deferAgentCreation)
+            throws IllegalArgumentException, DiscoveryException,
+            InvalidParameterValueException;
 }

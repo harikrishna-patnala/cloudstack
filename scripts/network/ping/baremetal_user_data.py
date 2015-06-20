@@ -25,8 +25,6 @@ import os
 import os.path
 import base64
 
-HTML_ROOT = "/var/www/html/"
-
 def writeIfNotHere(fileName, texts):
     if not os.path.exists(fileName):
         entries = []
@@ -72,16 +70,24 @@ def createRedirectEntry(vmIp, folder, filename):
         writeIfNotHere(htaccessFile, [entry1, entry2])
         
 
-def addUserData(vmIp, folder, fileName, contents):
-        
-    baseFolder = os.path.join(HTML_ROOT, folder, vmIp)
+def addUserData(vmIpOrMac, isWindows, folder, fileName, contents):
+
+    html_root = ""
+    # For windows this issues is not yet resolved.
+    # Because IP is given by external system. CloudStack does not know about the IP. 
+    # Need to think of how to create redirects based on MAC address in case of windows
+    if isWindows == "true":                            
+        html_root = os.path.join("C:", "inetpub", "wwwroot")
+    else:
+        html_root = "/var/www/html/"
+        createRedirectEntry(vmIpOrMac, folder, fileName)
+
+    baseFolder = os.path.join(html_root, folder, vmIpOrMac)
     if not os.path.exists(baseFolder):
         os.makedirs(baseFolder)
         
-    createRedirectEntry(vmIp, folder, fileName)
-    
-    datafileName = os.path.join(HTML_ROOT, folder, vmIp, fileName)
-    metaManifest = os.path.join(HTML_ROOT, folder, vmIp, "meta-data")
+    datafileName = os.path.join(html_root, folder, vmIpOrMac, fileName)
+    metaManifest = os.path.join(html_root, folder, vmIpOrMac, "meta-data")
     if folder == "userdata":
         if contents != "none":
             contents = base64.urlsafe_b64decode(contents)
@@ -99,6 +105,6 @@ if __name__ == '__main__':
     string = sys.argv[1]
     allEntires = string.split(";")
     for entry in allEntires:
-        (vmIp, folder, fileName, contents) = entry.split(',', 3)
-        addUserData(vmIp, folder, fileName, contents)
+        (vmIpOrMac, isWindows, folder, fileName, contents) = entry.split(',', 4)
+        addUserData(vmIpOrMac, isWindows, folder, fileName, contents)
     sys.exit(0)    

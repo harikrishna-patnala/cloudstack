@@ -28,7 +28,9 @@ import com.cloud.agent.api.LogLevel.Log4jLevel;
 public class VmDataCommand extends NetworkElementCommand {
 
     String vmIpAddress;
+    String vmMacAddress;
     String vmName;
+    private boolean isWindows = false;
     @LogLevel(Log4jLevel.Trace)
     List<String[]> vmData;
     boolean executeInSequence = false;
@@ -72,5 +74,23 @@ public class VmDataCommand extends NetworkElementCommand {
     public void addVmData(String folder, String file, String contents) {
         vmData.add(new String[] {folder, file, contents});
     }
+
+    public boolean isWindows() {
+        return isWindows;
+    }
+
+    public void setWindows(boolean isWindows) {
+        this.isWindows = isWindows;
+    }
+
+    public String getVmMacAddress() {
+        return vmMacAddress;
+    }
+
+    public void setVmMacAddress(String vmMacAddress) {
+        this.vmMacAddress = vmMacAddress;
+    }
+
+
 
 }

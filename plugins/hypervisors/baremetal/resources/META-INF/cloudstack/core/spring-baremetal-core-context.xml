@@ -47,5 +47,8 @@
     <bean id="baremetalDhcpDaoImpl" class="com.cloud.baremetal.database.BaremetalDhcpDaoImpl" />
     <bean id="baremetalPxeDaoImpl" class="com.cloud.baremetal.database.BaremetalPxeDaoImpl" />
     <bean id="BaremetalRctDaoImpl" class="com.cloud.baremetal.database.BaremetalRctDaoImpl" />
+    
+    <bean id="MoonshotNodeDaoImpl" class="com.cloud.baremetal.database.moonshot.MoonshotNodeDaoImpl" />
+    <bean id="MoonshotChassisDaoImpl" class="com.cloud.baremetal.database.moonshot.MoonshotChassisDaoImpl" />
 
 </beans>

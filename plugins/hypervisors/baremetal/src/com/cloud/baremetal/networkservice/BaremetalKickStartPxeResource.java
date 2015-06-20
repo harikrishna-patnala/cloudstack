@@ -27,8 +27,6 @@ import javax.naming.ConfigurationException;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
-import com.trilead.ssh2.SCPClient;
-
 import com.cloud.agent.api.Answer;
 import com.cloud.agent.api.Command;
 import com.cloud.agent.api.HostVmStateReportEntry;
@@ -38,6 +36,7 @@ import com.cloud.agent.api.routing.VmDataCommand;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.utils.script.Script;
 import com.cloud.utils.ssh.SSHCmdHelper;
+import com.trilead.ssh2.SCPClient;
 
 public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
     private static final Logger s_logger = Logger.getLogger(BaremetalKickStartPxeResource.class);
@@ -46,11 +45,13 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
 
     @Override
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
-        super.configure(name, params);
+        super.configure(name, params); //Check from Params if it is windows PXE.. if it is then no need to ssh and put the scripts there.
         _tftpDir = (String)params.get(BaremetalPxeService.PXE_PARAM_TFTP_DIR);
         if (_tftpDir == null) {
             throw new ConfigurationException("No tftp directory specified");
         }
+
+        boolean isWindows = _tftpDir.toLowerCase().contains("windows"); //TODO remove it - find some better way. Possibly through UI checkbox that says - it is windows pxe.
 
         com.trilead.ssh2.Connection sshConnection = new com.trilead.ssh2.Connection(_ip, 22);
 
@@ -62,34 +63,37 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
                 throw new ConfigurationException(String.format("Cannot connect to kickstart PXE server(IP=%1$s, username=%2$s, password=%3$s", _ip, _username, "******"));
             }
 
-            String cmd = String.format("[ -f /%1$s/pxelinux.0 ]", _tftpDir);
-            if (!SSHCmdHelper.sshExecuteCmd(sshConnection, cmd)) {
-                throw new ConfigurationException("Miss files in TFTP directory at " + _tftpDir + " check if pxelinux.0 are here");
-            }
+            if(!isWindows) {
+                String cmd = String.format("[ -f /%1$s/pxelinux.0 ]", _tftpDir);
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, cmd)) {
+                    throw new ConfigurationException("Miss files in TFTP directory at " + _tftpDir + " check if pxelinux.0 are here");
+                }
 
-            SCPClient scp = new SCPClient(sshConnection);
-            String prepareScript = "scripts/network/ping/prepare_kickstart_bootfile.py";
-            String prepareScriptPath = Script.findScript("", prepareScript);
-            if (prepareScriptPath == null) {
-                throw new ConfigurationException("Can not find prepare_kickstart_bootfile.py at " + prepareScript);
-            }
-            scp.put(prepareScriptPath, "/usr/bin/", "0755");
+                SCPClient scp = new SCPClient(sshConnection);
+                String prepareScript = "scripts/network/ping/prepare_kickstart_bootfile.py";
+                String prepareScriptPath = Script.findScript("", prepareScript);
+                if (prepareScriptPath == null) {
+                    throw new ConfigurationException("Can not find prepare_kickstart_bootfile.py at " + prepareScript);
+                }
+                scp.put(prepareScriptPath, "/usr/bin/", "0755");
 
-            String cpScript = "scripts/network/ping/prepare_kickstart_kernel_initrd.py";
-            String cpScriptPath = Script.findScript("", cpScript);
-            if (cpScriptPath == null) {
-                throw new ConfigurationException("Can not find prepare_kickstart_kernel_initrd.py at " + cpScript);
-            }
-            scp.put(cpScriptPath, "/usr/bin/", "0755");
+                String cpScript = "scripts/network/ping/prepare_kickstart_kernel_initrd.py";
+                String cpScriptPath = Script.findScript("", cpScript);
+                if (cpScriptPath == null) {
+                    throw new ConfigurationException("Can not find prepare_kickstart_kernel_initrd.py at " + cpScript);
+                }
+                scp.put(cpScriptPath, "/usr/bin/", "0755");
 
-            String userDataScript = "scripts/network/ping/baremetal_user_data.py";
-            String userDataScriptPath = Script.findScript("", userDataScript);
-            if (userDataScriptPath == null) {
-                throw new ConfigurationException("Can not find baremetal_user_data.py at " + userDataScript);
+                String userDataScript = "scripts/network/ping/baremetal_user_data.py";
+                String userDataScriptPath = Script.findScript("", userDataScript);
+                if (userDataScriptPath == null) {
+                    throw new ConfigurationException("Can not find baremetal_user_data.py at " + userDataScript);
+                }
+                scp.put(userDataScriptPath, "/usr/bin/", "0755");
             }
-            scp.put(userDataScriptPath, "/usr/bin/", "0755");
 
             return true;
+
         } catch (Exception e) {
             throw new CloudRuntimeException(e);
         } finally {
@@ -111,32 +115,48 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
     }
 
     private Answer execute(VmDataCommand cmd) {
-        com.trilead.ssh2.Connection sshConnection = new com.trilead.ssh2.Connection(_ip, 22);
-        try {
-            List<String[]> vmData = cmd.getVmData();
-            StringBuilder sb = new StringBuilder();
-            for (String[] data : vmData) {
-                String folder = data[0];
-                String file = data[1];
-                String contents = (data[2] == null) ? "none" : data[2];
+        List<String[]> vmData = cmd.getVmData();
+        StringBuilder sb = new StringBuilder();
+        for (String[] data : vmData) {
+            String folder = data[0];
+            String file = data[1];
+            String contents = (data[2] == null) ? "none" : data[2];
+            if(cmd.isWindows()){
+                sb.append(cmd.getVmMacAddress());
+                sb.append(",");
+                sb.append("true");
+            } else {
                 sb.append(cmd.getVmIpAddress());
                 sb.append(",");
-                sb.append(folder);
-                sb.append(",");
-                sb.append(file);
-                sb.append(",");
-                sb.append(contents);
-                sb.append(";");
+                sb.append("false");
             }
-            String arg = StringUtils.stripEnd(sb.toString(), ";");
+            sb.append(",");
+            sb.append(folder);
+            sb.append(",");
+            sb.append(file);
+            sb.append(",");
+            sb.append(contents);
+            sb.append(";");
+        }
 
+        String arg = StringUtils.stripEnd(sb.toString(), ";");
+
+        com.trilead.ssh2.Connection sshConnection = null;
+        try {
+            sshConnection = new com.trilead.ssh2.Connection(_ip, 22);
             sshConnection.connect(null, 60000, 60000);
             if (!sshConnection.authenticateWithPassword(_username, _password)) {
                 s_logger.debug("SSH Failed to authenticate");
                 throw new ConfigurationException(String.format("Cannot connect to PING PXE server(IP=%1$s, username=%2$s, password=%3$s", _ip, _username, _password));
             }
 
-            String script = String.format("python /usr/bin/baremetal_user_data.py '%s'", arg);
+            String script = null;
+            if(cmd.isWindows()) {
+                script = String.format("python c:/baremetal_user_data.py '%s'", arg); //TODO make it configurable based on env variable or some ccp config
+            } else {
+                script = String.format("python /usr/bin/baremetal_user_data.py '%s'", arg);
+            }
+
             if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
                 return new Answer(cmd, false, "Failed to add user data, command:" + script);
             }
@@ -172,20 +192,28 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
                 throw new ConfigurationException(String.format("Cannot connect to PING PXE server(IP=%1$s, username=%2$s, password=%3$s", _ip, _username, _password));
             }
 
-            String copyTo = String.format("%s/%s", _tftpDir, cmd.getTemplateUuid());
-            String script = String.format("python /usr/bin/prepare_kickstart_kernel_initrd.py %s %s %s", cmd.getKernel(), cmd.getInitrd(), copyTo);
+            if(cmd.isWindows()) {
+                String script = String.format("c:\\psexec\\PsExec.exe -u %s\\%s -p %s wdsutil /add-device /device:%s /id:%s %s", _domain, _username, _password, cmd.getMac().replaceAll(":", ""), cmd.getMac().replaceAll(":", ""), cmd.getAdditionalParams());
 
-            if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
-                return new Answer(cmd, false, "prepare kickstart at pxe server " + _ip + " failed, command:" + script);
-            }
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
+                    return new Answer(cmd, false, "prepare WDS at " + _ip + " failed, command:" + script);
+                }
+            } else {
+                String copyTo = String.format("%s/%s", _tftpDir, cmd.getTemplateUuid());
+                String script = String.format("python /usr/bin/prepare_kickstart_kernel_initrd.py %s %s %s", cmd.getKernel(), cmd.getInitrd(), copyTo);
 
-            String kernelPath = String.format("%s/vmlinuz", cmd.getTemplateUuid());
-            String initrdPath = String.format("%s/initrd.img", cmd.getTemplateUuid());
-            script =
-                String.format("python /usr/bin/prepare_kickstart_bootfile.py %s %s %s %s %s %s", _tftpDir, cmd.getMac(), kernelPath, initrdPath, cmd.getKsFile(),
-                    cmd.getMac());
-            if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
-                return new Answer(cmd, false, "prepare kickstart at pxe server " + _ip + " failed, command:" + script);
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
+                    return new Answer(cmd, false, "prepare kickstart at pxe server " + _ip + " failed, command:" + script);
+                }
+
+                String kernelPath = String.format("%s/vmlinuz", cmd.getTemplateUuid());
+                String initrdPath = String.format("%s/initrd.img", cmd.getTemplateUuid());
+                script =
+                    String.format("python /usr/bin/prepare_kickstart_bootfile.py %s %s %s %s %s %s", _tftpDir, cmd.getMac(), kernelPath, initrdPath, cmd.getKsFile(),
+                        cmd.getMac());
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
+                    return new Answer(cmd, false, "prepare kickstart at pxe server " + _ip + " failed, command:" + script);
+                }
             }
 
             s_logger.debug("Prepare kickstart PXE server successfully");
@@ -199,4 +227,14 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
             }
         }
     }
+
+    /*
+    public static void main(String args[]) throws Exception {
+        com.trilead.ssh2.Connection sshConnection = new com.trilead.ssh2.Connection("10.102.153.103", 22);
+        sshConnection.connect(null, 60000, 60000);
+        System.out.println(sshConnection.authenticateWithPassword("administrator", "Passw0rd"));
+        System.out.println(SSHCmdHelper.sshExecuteCmd(sshConnection, "cmd /c md c:\\abc"));
+        //System.out.println(SshHelper.sshExecute("10.x.x.x", 22, "administrator", null, "Ppp", "cmd /c md c:\\abc", 60000, 60000, 60000));
+    }
+    */
 }

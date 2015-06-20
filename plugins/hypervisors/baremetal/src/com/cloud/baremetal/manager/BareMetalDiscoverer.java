@@ -33,6 +33,9 @@ import javax.ejb.Local;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 
+import citrix.moonshot.MoonshotClient;
+import com.cloud.baremetal.database.moonshot.MoonshotNodeDao;
+import com.cloud.baremetal.networkservice.BaremetalMoonshotResourceBase;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.log4j.Logger;
 
@@ -67,6 +70,9 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
     @Inject
     protected VMInstanceDao _vmDao = null;
 
+    @Inject
+    protected MoonshotNodeDao _moonshotNodeDao = null;
+
     @Override
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
         _resourceMgr.registerResourceStateAdapter(this.getClass().getSimpleName(), this);
@@ -89,14 +95,6 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
             return null;
         } */
 
-        Map<BareMetalResourceBase, Map<String, String>> resources = new HashMap<BareMetalResourceBase, Map<String, String>>();
-        Map<String, String> details = new HashMap<String, String>();
-
-        if (!url.getScheme().equals("http")) {
-            String msg = "urlString is not http so we're not taking care of the discovery for this: " + url;
-            s_logger.debug(msg);
-            return null;
-        }
         if (clusterId == null) {
             String msg = "must specify cluster Id when add host";
             s_logger.debug(msg);
@@ -121,100 +119,29 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
             throw new RuntimeException("Cannot find zone " + dcId);
         }
 
-        try {
-            String hostname = url.getHost();
-            InetAddress ia = InetAddress.getByName(hostname);
-            String ipmiIp = ia.getHostAddress();
-            String guid = UUID.nameUUIDFromBytes(ipmiIp.getBytes()).toString();
 
-            String injectScript = "scripts/util/ipmi.py";
-            String scriptPath = Script.findScript("", injectScript);
-            if (scriptPath == null) {
-                throw new CloudRuntimeException("Unable to find key ipmi script "
-                        + injectScript);
-            }
+        BaremetalManager.BaremetalProvider provider = BaremetalManager.BaremetalProvider.DEFAULT;
 
-            final Script2 command = new Script2(scriptPath, s_logger);
-            command.add("ping");
-            command.add("hostname="+ipmiIp);
-            command.add("usrname="+username);
-            command.add("password="+password, ParamType.PASSWORD);
-            final String result = command.execute();
-            if (result != null) {
-                s_logger.warn(String.format("Can not set up ipmi connection(ip=%1$s, username=%2$s, password=%3$s, args) because %4$s", ipmiIp, username, "******", result));
-                return null;
-            }
-
-            ClusterVO clu = _clusterDao.findById(clusterId);
-            if (clu.getGuid() == null) {
-                clu.setGuid(UUID.randomUUID().toString());
-                _clusterDao.update(clusterId, clu);
-            }
-
-            Map<String, Object> params = new HashMap<String, Object>();
-            params.putAll(_params);
-            params.put("zone", Long.toString(dcId));
-            params.put("pod", Long.toString(podId));
-            params.put("cluster",  Long.toString(clusterId));
-            params.put("guid", guid);
-            params.put(ApiConstants.PRIVATE_IP, ipmiIp);
-            params.put(ApiConstants.USERNAME, username);
-            params.put(ApiConstants.PASSWORD, password);
-            params.put("vmDao", _vmDao);
-            params.put("configDao", _configDao);
-
-            String resourceClassName = _configDao.getValue(Config.ExternalBaremetalResourceClassName.key());
-            BareMetalResourceBase resource = null;
-            if (resourceClassName != null) {
-                Class<?> clazz = Class.forName(resourceClassName);
-                resource = (BareMetalResourceBase) clazz.newInstance();
-                String externalUrl = _configDao.getValue(Config.ExternalBaremetalSystemUrl.key());
-                if (externalUrl == null) {
-                    throw new IllegalArgumentException(String.format("You must specify ExternalBaremetalSystemUrl in global config page as ExternalBaremetalResourceClassName is not null"));
-                }
-                details.put(BaremetalManager.ExternalBaremetalSystemUrl, externalUrl);
-            } else {
-                resource = new BareMetalResourceBase();
-            }
-            resource.configure("Bare Metal Agent", params);
-
-            String memCapacity = (String)params.get(ApiConstants.MEMORY);
-            String cpuCapacity = (String)params.get(ApiConstants.CPU_SPEED);
-            String cpuNum = (String)params.get(ApiConstants.CPU_NUMBER);
-            String mac = (String)params.get(ApiConstants.HOST_MAC);
-            if (hostTags != null && hostTags.size() != 0) {
-                details.put("hostTag", hostTags.get(0));
-            }
-            details.put(ApiConstants.MEMORY, memCapacity);
-            details.put(ApiConstants.CPU_SPEED, cpuCapacity);
-            details.put(ApiConstants.CPU_NUMBER, cpuNum);
-            details.put(ApiConstants.HOST_MAC, mac);
-            details.put(ApiConstants.USERNAME, username);
-            details.put(ApiConstants.PASSWORD, password);
-            details.put(ApiConstants.PRIVATE_IP, ipmiIp);
-            String vmIp = (String)params.get(ApiConstants.IP_ADDRESS);
-            if (vmIp != null) {
-                details.put(ApiConstants.IP_ADDRESS, vmIp);
-            }
-            String isEchoScAgent = _configDao.getValue(Config.EnableBaremetalSecurityGroupAgentEcho.key());
-            details.put(BaremetalManager.EchoSecurityGroupAgent, isEchoScAgent);
-
-            resources.put(resource, details);
-            resource.start();
-
-            zone.setGatewayProvider(Network.Provider.ExternalGateWay.getName());
-            zone.setDnsProvider(Network.Provider.ExternalDhcpServer.getName());
-            zone.setDhcpProvider(Network.Provider.ExternalDhcpServer.getName());
-            _dcDao.update(zone.getId(), zone);
-
-            s_logger.debug(String.format("Discover Bare Metal host successfully(ip=%1$s, username=%2$s, password=%3%s," +
-                    "cpuNum=%4$s, cpuCapacity-%5$s, memCapacity=%6$s)", ipmiIp, username, "******", cpuNum, cpuCapacity, memCapacity));
-            return resources;
-        } catch (Exception e) {
-            s_logger.warn("Can not set up bare metal agent", e);
+        if(_params.containsKey(ApiConstants.BAREMETAL_PROVIDER)) {
+            provider = BaremetalManager.BaremetalProvider.valueOf(_params.get(ApiConstants.BAREMETAL_PROVIDER));
         }
 
-        return null;
+        Map<? extends ServerResource, Map<String, String>> result = null;
+
+        switch (provider) {
+            case DEFAULT: {
+                result = findBaremetal(zone, dcId, podId, clusterId, url, username, password, hostTags);
+                break;
+            }
+            case MOONSHOT: {
+                result = findBaremetalMoonshot(zone, dcId, podId, clusterId, url, username, password, hostTags);
+                break;
+            }
+        }
+
+        _params.clear(); //make sure normal baremetal works after moonshot discovery
+
+        return result;
     }
 
     @Override
@@ -278,6 +205,195 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
         params.put("vmDao", _vmDao);
         params.put("configDao", _configDao);
         return params;
+    }
+
+    private Map<? extends ServerResource, Map<String, String>> findBaremetal(DataCenterVO zone, long dcId, Long podId, Long clusterId, URI url, String username, String password, List<String> hostTags) {
+        Map<BareMetalResourceBase, Map<String, String>> resources = new HashMap<BareMetalResourceBase, Map<String, String>>();
+        Map<String, String> details = new HashMap<String, String>();
+
+        if (!url.getScheme().equals("http")) {
+            String msg = "urlString is not http so we're not taking care of the discovery for this: " + url;
+            s_logger.debug(msg);
+            return null;
+        }
+
+        try {
+            String hostname = url.getHost();
+            InetAddress ia = InetAddress.getByName(hostname);
+            String ipmiIp = ia.getHostAddress();
+            String guid = UUID.nameUUIDFromBytes(ipmiIp.getBytes()).toString();
+
+            String injectScript = "scripts/util/ipmi.py";
+            String scriptPath = Script.findScript("", injectScript);
+            if (scriptPath == null) {
+                throw new CloudRuntimeException("Unable to find key ipmi script "
+                        + injectScript);
+            }
+
+            final Script2 command = new Script2(scriptPath, s_logger);
+            command.add("ping");
+            command.add("hostname="+ipmiIp);
+            command.add("usrname="+username);
+            command.add("password="+password, ParamType.PASSWORD);
+            final String result = command.execute();
+            if (result != null) {
+                s_logger.warn(String.format("Can not set up ipmi connection(ip=%1$s, username=%2$s, password=%3$s, args) because %4$s", ipmiIp, username, "******", result));
+                return null;
+            }
+
+            ClusterVO clu = _clusterDao.findById(clusterId);
+            if (clu.getGuid() == null) {
+                clu.setGuid(UUID.randomUUID().toString());
+                _clusterDao.update(clusterId, clu);
+            }
+
+            Map<String, Object> params = new HashMap<String, Object>();
+            params.putAll(_params);
+            params.put("zone", Long.toString(dcId));
+            params.put("pod", Long.toString(podId));
+            params.put("cluster",  Long.toString(clusterId));
+            params.put("guid", guid);
+            params.put(ApiConstants.PRIVATE_IP, ipmiIp);
+            params.put(ApiConstants.USERNAME, username);
+            params.put(ApiConstants.PASSWORD, password);
+            params.put("vmDao", _vmDao);
+            params.put("configDao", _configDao);
+
+            BareMetalResourceBase resource = new BareMetalResourceBase();
+            resource.configure("Bare Metal Agent", params);
+
+            String memCapacity = (String)params.get(ApiConstants.MEMORY);
+            String cpuCapacity = (String)params.get(ApiConstants.CPU_SPEED);
+            String cpuNum = (String)params.get(ApiConstants.CPU_NUMBER);
+            String mac = (String)params.get(ApiConstants.HOST_MAC);
+            if (hostTags != null && hostTags.size() != 0) {
+                details.put("hostTag", hostTags.get(0));
+            }
+            details.put(ApiConstants.MEMORY, memCapacity);
+            details.put(ApiConstants.CPU_SPEED, cpuCapacity);
+            details.put(ApiConstants.CPU_NUMBER, cpuNum);
+            details.put(ApiConstants.HOST_MAC, mac);
+            details.put(ApiConstants.USERNAME, username);
+            details.put(ApiConstants.PASSWORD, password);
+            details.put(ApiConstants.PRIVATE_IP, ipmiIp);
+            String vmIp = (String)params.get(ApiConstants.IP_ADDRESS);
+            if (vmIp != null) {
+                details.put(ApiConstants.IP_ADDRESS, vmIp);
+            }
+            String isEchoScAgent = _configDao.getValue(Config.EnableBaremetalSecurityGroupAgentEcho.key());
+            details.put(BaremetalManager.EchoSecurityGroupAgent, isEchoScAgent);
+
+            resources.put(resource, details);
+            resource.start();
+
+            zone.setGatewayProvider(Network.Provider.ExternalGateWay.getName());
+            zone.setDnsProvider(Network.Provider.ExternalDhcpServer.getName());
+            zone.setDhcpProvider(Network.Provider.ExternalDhcpServer.getName());
+            _dcDao.update(zone.getId(), zone);
+
+            s_logger.debug(String.format("Discover Bare Metal host successfully(ip=%1$s, username=%2$s, password=%3%s," +
+                    "cpuNum=%4$s, cpuCapacity-%5$s, memCapacity=%6$s)", ipmiIp, username, "******", cpuNum, cpuCapacity, memCapacity));
+            return resources;
+        } catch (Exception e) {
+            s_logger.warn("Can not set up bare metal agent", e);
+        }
+
+        return null;
+    }
+
+    private Map<? extends ServerResource, Map<String, String>> findBaremetalMoonshot(DataCenterVO zone, long dcId, Long podId, Long clusterId, URI url, String username, String password, List<String> hostTags) {
+        Map<BareMetalResourceBase, Map<String, String>> resources = new HashMap<BareMetalResourceBase, Map<String, String>>();
+        Map<String, String> details = new HashMap<String, String>();
+
+        try {
+            String hostname = url.getHost();
+            InetAddress ia = InetAddress.getByName(hostname);
+            String ipmiIp = ia.getHostAddress();
+
+            Map<String, Object> params = new HashMap<String, Object>();
+            params.putAll(_params);
+
+            String mac = (String)params.get(ApiConstants.HOST_MAC);
+
+            String guid = UUID.nameUUIDFromBytes(mac.getBytes()).toString();
+            //MoonshotNodeVO moonshotNodeVO = _moonshotNodeDao.findByMacAddress(mac);
+            String cartridgeNodeString = "C" + (String)params.get("cartridgeNumber") + "N" + (String)params.get("nodeNumber");
+            s_logger.info("Found Moonshot node:" + cartridgeNodeString);
+
+            //MoonshotClient client = new MoonshotClient(username, password, ipmiIp, url.getScheme(), url.getPort());
+            MoonshotClient client = new MoonshotClient(username, password, ipmiIp, "https", 443);
+            boolean result = client.pingNode(cartridgeNodeString);
+
+            if (!result) {
+                s_logger.warn(String.format("Can not set up ipmi connection(ip=%1$s, username=%2$s, password=%3$s, args) because %4$s", ipmiIp, username, "******", result));
+                return null;
+            } else {
+                s_logger.info("Successfully pinged Moonshot node:" + cartridgeNodeString);
+            }
+
+            ClusterVO clu = _clusterDao.findById(clusterId);
+            if (clu.getGuid() == null) {
+                clu.setGuid(UUID.randomUUID().toString());
+                _clusterDao.update(clusterId, clu);
+            }
+
+            params.put("zone", Long.toString(dcId));
+            params.put("pod", Long.toString(podId));
+            params.put("cluster",  Long.toString(clusterId));
+            params.put("guid", guid);
+            params.put(ApiConstants.PRIVATE_IP, ipmiIp);
+            params.put(ApiConstants.USERNAME, username);
+            params.put(ApiConstants.PASSWORD, password);
+            params.put("vmDao", _vmDao);
+            params.put("configDao", _configDao);
+            //params.put("moonshotScheme", url.getScheme()); //TODO 1. change to enum string 2. configure also should refer same enum
+            //params.put("moonshotPort", url.getPort()); //TODO  1. change to enum string 2. configure also should refer same enum
+
+            BaremetalMoonshotResourceBase resource = new BaremetalMoonshotResourceBase();
+
+            String memCapacity = (String)params.get(ApiConstants.MEMORY);
+            String cpuCapacity = (String)params.get(ApiConstants.CPU_SPEED);
+            String cpuNum = (String)params.get(ApiConstants.CPU_NUMBER);
+
+            params.put(BaremetalManager.CartridgeNodeLocation, cartridgeNodeString);
+
+            resource.configure("Bare Metal Agent", params);
+
+            if (hostTags != null && hostTags.size() != 0) {
+                details.put("hostTag", hostTags.get(0));
+            }
+            details.put(ApiConstants.MEMORY, memCapacity);
+            details.put(ApiConstants.CPU_SPEED, cpuCapacity);
+            details.put(ApiConstants.CPU_NUMBER, cpuNum);
+            details.put(ApiConstants.HOST_MAC, mac);
+            details.put(ApiConstants.USERNAME, username);
+            details.put(ApiConstants.PASSWORD, password);
+            details.put(ApiConstants.PRIVATE_IP, ipmiIp);
+            String vmIp = (String)params.get(ApiConstants.IP_ADDRESS);
+            if (vmIp != null) {
+                details.put(ApiConstants.IP_ADDRESS, vmIp);
+            }
+            String isEchoScAgent = _configDao.getValue(Config.EnableBaremetalSecurityGroupAgentEcho.key());
+            details.put(BaremetalManager.EchoSecurityGroupAgent, isEchoScAgent);
+
+            details.put(BaremetalManager.CartridgeNodeLocation, cartridgeNodeString);
+
+            resources.put(resource, details);
+            resource.start();
+
+            zone.setGatewayProvider(Network.Provider.ExternalGateWay.getName());
+            zone.setDnsProvider(Network.Provider.ExternalDhcpServer.getName());
+            zone.setDhcpProvider(Network.Provider.ExternalDhcpServer.getName());
+            _dcDao.update(zone.getId(), zone);
+
+            s_logger.debug(String.format("Discover Bare Metal host successfully(ip=%1$s, username=%2$s, password=%3%s," +
+                    "cpuNum=%4$s, cpuCapacity-%5$s, memCapacity=%6$s)", ipmiIp, username, "******", cpuNum, cpuCapacity, memCapacity));
+            return resources;
+        } catch (Exception e) {
+            s_logger.error("Can not set up bare metal agent", e);
+        }
+        s_logger.error("Can not set up bare metal agent. No resource could be configured.");
+        return null;
     }
 
 }

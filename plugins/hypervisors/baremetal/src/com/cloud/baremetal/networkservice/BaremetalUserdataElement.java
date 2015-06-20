@@ -75,7 +75,7 @@ public class BaremetalUserdataElement extends AdapterBase implements NetworkElem
             return false;
         }
 
-        return pxeMgr.addUserData(nic, vm);
+        return pxeMgr.addUserData(nic, vm, dest);
     }
 
     @Override

@@ -44,6 +44,7 @@ public class BaremetalPxeResourceBase extends ManagerBase implements ServerResou
     private static final Logger s_logger = Logger.getLogger(BaremetalPxeResourceBase.class);
     String _name;
     String _guid;
+    String _domain;
     String _username;
     String _password;
     String _ip;
@@ -55,10 +56,18 @@ public class BaremetalPxeResourceBase extends ManagerBase implements ServerResou
         _name = name;
         _guid = (String)params.get(BaremetalPxeService.PXE_PARAM_GUID);
         _ip = (String)params.get(BaremetalPxeService.PXE_PARAM_IP);
-        _username = (String)params.get(BaremetalPxeService.PXE_PARAM_USERNAME);
         _password = (String)params.get(BaremetalPxeService.PXE_PARAM_PASSWORD);
         _zoneId = (String)params.get(BaremetalPxeService.PXE_PARAM_ZONE);
         _podId = (String)params.get(BaremetalPxeService.PXE_PARAM_POD);
+
+        String pxeUsername = (String)params.get(BaremetalPxeService.PXE_PARAM_USERNAME);
+        if(pxeUsername.contains("\\")) {
+            String[] domainAndUsername = pxeUsername.split("\\\\");
+            _domain = domainAndUsername[0];
+            _username = domainAndUsername[1];
+        } else {
+            _username = pxeUsername;
+        }
 
         if (_guid == null) {
             throw new ConfigurationException("No Guid specified");

@@ -56,7 +56,7 @@ public interface BaremetalPxeManager extends Manager, PluggableService {
 
     List<BaremetalPxeResponse> listPxeServers(ListBaremetalPxeServersCmd cmd);
 
-    boolean addUserData(NicProfile nic, VirtualMachineProfile vm);
+    boolean addUserData(NicProfile nic, VirtualMachineProfile vm, DeployDestination dest);
 
     public static final Network.Service BAREMETAL_PXE_SERVICE = new Network.Service("BaremetalPxeService");
     public static final String BAREMETAL_PXE_CAPABILITY = "BaremetalPxe";

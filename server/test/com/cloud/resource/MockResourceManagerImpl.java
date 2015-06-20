@@ -604,4 +604,15 @@ public class MockResourceManagerImpl extends ManagerBase implements ResourceMana
         // TODO Auto-generated method stub
         return false;
     }
+
+    @Override
+    public List<HostVO> discoverHostsFull(Long dcId, Long podId,
+            Long clusterId, String clusterName, String url, String username,
+            String password, String hypervisorType, List<String> hostTags,
+            Map<String, String> params, boolean deferAgentCreation)
+            throws IllegalArgumentException, DiscoveryException,
+            InvalidParameterValueException {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

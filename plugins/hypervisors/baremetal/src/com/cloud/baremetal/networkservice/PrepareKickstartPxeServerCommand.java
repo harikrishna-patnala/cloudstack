@@ -27,6 +27,8 @@ public class PrepareKickstartPxeServerCommand extends Command {
     private String ksDevice;
     private String kernel;
     private String initrd;
+    private boolean isWindows = false;
+    private String additionalParams = "";
 
     @Override
     public boolean executeInSequence() {
@@ -80,4 +82,24 @@ public class PrepareKickstartPxeServerCommand extends Command {
     public void setKsDevice(String ksDevice) {
         this.ksDevice = ksDevice;
     }
+
+    public boolean isWindows() {
+        return isWindows;
+    }
+
+    public void setWindows(boolean isWindows) {
+        this.isWindows = isWindows;
+    }
+
+    public String getAdditionalParams() {
+        return additionalParams;
+    }
+
+    public void setAdditionalParams(String additionalParams) {
+        this.additionalParams = additionalParams;
+    }
+
+
+
+
 }

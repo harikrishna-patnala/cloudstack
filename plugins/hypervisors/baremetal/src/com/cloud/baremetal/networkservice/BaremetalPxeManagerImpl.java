@@ -223,7 +223,7 @@ public class BaremetalPxeManagerImpl extends ManagerBase implements BaremetalPxe
         cmd.setWindows(isWindows);
         if(isWindows) {
             //cmd.setVmMacAddress(dest.getHost().getPrivateMacAddress()); //TODO - confirm whether private macaddress is right thing to add here.
-            cmd.setVmMacAddress(nic.getMacAddress());
+            cmd.setVmMacAddress(nic.getMacAddress().replaceAll(":", ""));
         }
 
         List<PhysicalNetworkVO> phys = _phynwDao.listByZone(vm.getDataCenterId());

@@ -77,7 +77,7 @@ def addUserData(vmIpOrMac, isWindows, folder, fileName, contents):
     # Because IP is given by external system. CloudStack does not know about the IP. 
     # Need to think of how to create redirects based on MAC address in case of windows
     if isWindows == "true":                            
-        html_root = os.path.join("C:", "inetpub", "wwwroot")
+        html_root = os.path.join("C:\\", "inetpub", "wwwroot")
     else:
         html_root = "/var/www/html/"
         createRedirectEntry(vmIpOrMac, folder, fileName)

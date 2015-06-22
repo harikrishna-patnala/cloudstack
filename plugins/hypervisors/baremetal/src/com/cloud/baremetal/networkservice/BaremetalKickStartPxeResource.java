@@ -152,7 +152,7 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
 
             String script = null;
             if(cmd.isWindows()) {
-                script = String.format("python c:/baremetal_user_data.py '%s'", arg); //TODO make it configurable based on env variable or some ccp config
+                script = String.format("python c:/baremetal_user_data.py \"%s\"", arg); //TODO make it configurable based on env variable or some ccp config
             } else {
                 script = String.format("python /usr/bin/baremetal_user_data.py '%s'", arg);
             }

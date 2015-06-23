@@ -193,7 +193,7 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
             }
 
             if(cmd.isWindows()) {
-                String script = String.format("c:\\psexec\\PsExec.exe -u %s\\%s -p %s wdsutil /add-device /device:%s /id:%s %s", _domain, _username, _password, cmd.getMac().replaceAll(":", ""), cmd.getMac().replaceAll(":", ""), cmd.getAdditionalParams());
+                String script = String.format("c:\\psexec\\PsExec.exe -accepteula -u %s\\%s -p %s wdsutil /add-device /device:%s /id:%s %s", _domain, _username, _password, cmd.getMac().replaceAll(":", ""), cmd.getMac().replaceAll(":", ""), cmd.getAdditionalParams());
 
                 if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
                     return new Answer(cmd, false, "prepare WDS at " + _ip + " failed, command:" + script);

@@ -193,10 +193,28 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
             }
 
             if(cmd.isWindows()) {
-                String script = String.format("c:\\psexec\\PsExec.exe -accepteula -u %s\\%s -p %s wdsutil /add-device /device:%s /id:%s %s", _domain, _username, _password, cmd.getMac().replaceAll(":", ""), cmd.getMac().replaceAll(":", ""), cmd.getAdditionalParams());
+                String command = String.format("PsExec.exe -accepteula -u %s\\%s -p %s", _domain, _username, _password);
 
-                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, script)) {
-                    return new Answer(cmd, false, "prepare WDS at " + _ip + " failed, command:" + script);
+                String psexecCheck = "cmd /c cd";
+
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, command + psexecCheck)) {
+                    return new Answer(cmd, false, "Unable to execute PsExec.exe, Please make sure it is in the path");
+                }
+
+                String deviceMac = cmd.getMac().replaceAll(":", "");
+
+                String wdsutilDeviceCheck = String.format("wdsutil /get-device /id:%s", deviceMac);
+
+                String wdsutilCommand = "wdsutil /add-device /device:%s /id:%s %s";
+
+                if (SSHCmdHelper.sshExecuteCmd(sshConnection, command + wdsutilDeviceCheck)) {
+                    wdsutilCommand = "wdsutil /set-device /device:%s /id:%s %s";
+                }
+
+                wdsutilCommand = String.format(wdsutilCommand, deviceMac, deviceMac, cmd.getAdditionalParams());
+
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, wdsutilCommand)) {
+                    return new Answer(cmd, false, "prepare WDS at " + _ip + " failed, command:" + wdsutilCommand);
                 }
             } else {
                 String copyTo = String.format("%s/%s", _tftpDir, cmd.getTemplateUuid());

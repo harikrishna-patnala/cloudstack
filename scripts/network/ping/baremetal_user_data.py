@@ -73,21 +73,25 @@ def createRedirectEntry(vmIp, folder, filename):
 def addUserData(vmIpOrMac, isWindows, folder, fileName, contents):
 
     html_root = ""
+    targetFileName = fileName;
+    targetMetadataFile = "meta-data";
     # For windows this issues is not yet resolved.
     # Because IP is given by external system. CloudStack does not know about the IP. 
     # Need to think of how to create redirects based on MAC address in case of windows
     if isWindows == "true":                            
         html_root = os.path.join("C:\\", "inetpub", "wwwroot")
+        targetFileName = targetFileName + ".txt"
+        targetMetadataFile = targetMetadataFile + ".txt";
     else:
         html_root = "/var/www/html/"
-        createRedirectEntry(vmIpOrMac, folder, fileName)
+        createRedirectEntry(vmIpOrMac, folder, targetFileName)
 
     baseFolder = os.path.join(html_root, folder, vmIpOrMac)
     if not os.path.exists(baseFolder):
         os.makedirs(baseFolder)
         
-    datafileName = os.path.join(html_root, folder, vmIpOrMac, fileName)
-    metaManifest = os.path.join(html_root, folder, vmIpOrMac, "meta-data")
+    datafileName = os.path.join(html_root, folder, vmIpOrMac, targetFileName)
+    metaManifest = os.path.join(html_root, folder, vmIpOrMac, targetMetadataFile)
     if folder == "userdata":
         if contents != "none":
             contents = base64.urlsafe_b64decode(contents)
@@ -99,7 +103,7 @@ def addUserData(vmIpOrMac, isWindows, folder, fileName, contents):
     f.close()
     
     if folder == "metadata" or folder == "meta-data":
-        writeIfNotHere(metaManifest, fileName)
+        writeIfNotHere(metaManifest, targetFileName)
 
 if __name__ == '__main__':
     string = sys.argv[1]

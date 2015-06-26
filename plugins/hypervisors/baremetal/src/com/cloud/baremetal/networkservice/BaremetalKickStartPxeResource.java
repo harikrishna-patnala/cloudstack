@@ -193,7 +193,7 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
             }
 
             if(cmd.isWindows()) {
-                String command = String.format("PsExec.exe -accepteula -u %s\\%s -p %s", _domain, _username, _password);
+                String command = String.format("PsExec.exe -accepteula -u %s\\%s -p %s ", _domain, _username, _password);
 
                 String psexecCheck = "cmd /c cd";
 

@@ -195,12 +195,6 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
             if(cmd.isWindows()) {
                 String command = String.format("PsExec.exe -accepteula -u %s\\%s -p %s ", _domain, _username, _password);
 
-                String psexecCheck = "cmd /c cd";
-
-                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, command + psexecCheck)) {
-                    return new Answer(cmd, false, "Unable to execute PsExec.exe, Please make sure it is in the path");
-                }
-
                 String deviceMac = cmd.getMac().replaceAll(":", "");
 
                 String wdsutilDeviceCheck = String.format("wdsutil /get-device /id:%s", deviceMac);
@@ -213,7 +207,7 @@ public class BaremetalKickStartPxeResource extends BaremetalPxeResourceBase {
 
                 wdsutilCommand = String.format(wdsutilCommand, deviceMac, deviceMac, cmd.getAdditionalParams());
 
-                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, wdsutilCommand)) {
+                if (!SSHCmdHelper.sshExecuteCmd(sshConnection, command + wdsutilCommand)) {
                     return new Answer(cmd, false, "prepare WDS at " + _ip + " failed, command:" + wdsutilCommand);
                 }
             } else {

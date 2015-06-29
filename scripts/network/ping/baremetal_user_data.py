@@ -25,6 +25,8 @@ import os
 import os.path
 import base64
 
+IIS_DEFAULT_FOLDER="C:\\inetpub\\wwwroot"
+
 def writeIfNotHere(fileName, texts):
     if not os.path.exists(fileName):
         entries = []
@@ -79,7 +81,7 @@ def addUserData(vmIpOrMac, isWindows, folder, fileName, contents):
     # Because IP is given by external system. CloudStack does not know about the IP. 
     # Need to think of how to create redirects based on MAC address in case of windows
     if isWindows == "true":                            
-        html_root = os.path.join("C:\\", "inetpub", "wwwroot")
+        html_root = IIS_DEFAULT_FOLDER
         targetFileName = targetFileName + ".txt"
         targetMetadataFile = targetMetadataFile + ".txt";
     else:

@@ -24,6 +24,7 @@ import com.cloud.utils.component.PluggableService;
 
 import org.apache.cloudstack.api.AddMoonshotChassisCmd;
 import org.apache.cloudstack.api.BaremetalProvisionDoneNotificationCmd;
+import org.apache.cloudstack.api.UpdateMoonshotChassisCmd;
 
 public interface BaremetalManager extends Manager, PluggableService {
     public static final String EchoSecurityGroupAgent = "EchoSecurityGroupAgent";
@@ -37,4 +38,5 @@ public interface BaremetalManager extends Manager, PluggableService {
 
     void notifyProvisionDone(BaremetalProvisionDoneNotificationCmd cmd);
     public MoonshotChassisResponse addMoonshotChassis(AddMoonshotChassisCmd cmd);
+    public MoonshotChassisResponse updateMoonshotChassis(UpdateMoonshotChassisCmd cmd);
 }

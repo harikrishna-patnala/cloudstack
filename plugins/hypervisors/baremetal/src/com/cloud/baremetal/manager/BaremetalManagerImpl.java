@@ -26,6 +26,7 @@ import javax.ejb.Local;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 
+import com.cloud.host.DetailVO;
 import com.cloud.utils.db.QueryBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.exception.CloudRuntimeException;
@@ -44,7 +45,6 @@ import java.util.HashMap;
 
 import citrix.moonshot.MoonshotClient;
 import citrix.moonshot.models.Node;
-
 import com.cloud.baremetal.database.moonshot.MoonshotChassisDao;
 import com.cloud.baremetal.database.moonshot.MoonshotChassisVO;
 import com.cloud.baremetal.database.moonshot.MoonshotNodeDao;
@@ -64,6 +64,7 @@ import com.cloud.utils.fsm.StateListener;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VirtualMachine.Event;
 import com.cloud.vm.VirtualMachine.State;
+import org.apache.cloudstack.api.UpdateMoonshotChassisCmd;
 
 @Local(value = {BaremetalManager.class})
 public class BaremetalManagerImpl extends ManagerBase implements BaremetalManager, StateListener<State, VirtualMachine.Event, VirtualMachine> {
@@ -149,6 +150,7 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
         cmds.add(AddBaremetalHostCmd.class);
         cmds.add(BaremetalProvisionDoneNotificationCmd.class);
         cmds.add(AddMoonshotChassisCmd.class);
+        cmds.add(UpdateMoonshotChassisCmd.class);
         return cmds;
     }
 
@@ -187,45 +189,131 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
     }
 
     @Override
+    public MoonshotChassisResponse updateMoonshotChassis(UpdateMoonshotChassisCmd cmd) {
+        s_logger.debug("Entering updateMoonshotChassis");
+
+        MoonshotChassisVO moonshotChassis = _moonshotChassisDao.findByUuid(cmd.getChassisId());
+        if(moonshotChassis == null) {
+            moonshotChassis = _moonshotChassisDao.findById(Long.valueOf(cmd.getChassisId()));
+        }
+
+        if(moonshotChassis == null) {
+            throw new CloudRuntimeException(String.format("Moonshot chassis with id: %s does not exist", cmd.getChassisId()));
+        }
+
+        try {
+            MoonshotClient moonshotClient = new MoonshotClient(moonshotChassis.getUsername(), cmd.getPassword(), moonshotChassis.getUrl(), "https", 443);
+            List<Node> nodes = moonshotClient.getAllNodes();
+            if(nodes != null && !nodes.isEmpty()) {
+
+                List<Node> nodesToBeImported = new ArrayList<Node>();
+
+                for(Node node : nodes) {
+                    String nodeMac = node.getMac()[0];
+                    MoonshotNodeVO moonshotNodeVo = _moonshotNodeDao.findByMacAddress(nodeMac);
+
+                    if(moonshotNodeVo == null) { //new node, import
+                        nodesToBeImported.add(node);
+                    } else { // node exists
+
+                        if(!moonshotNodeVo.getShortName().equals(node.getShortName())) { //node location updated
+
+                            DetailVO hostDetail = detailsDao.findDetail(moonshotNodeVo.getHostId(), BaremetalManager.CartridgeNodeLocation);
+                            if(hostDetail != null) {
+                                hostDetail.setValue(node.getShortName());
+                                detailsDao.persist(hostDetail); //update host details
+
+                                moonshotNodeVo.setCartridge(String.valueOf(node.getCartridge()));
+                                moonshotNodeVo.setNode(String.valueOf(node.getNode()));
+                                _moonshotNodeDao.persist(moonshotNodeVo); //update moonshot nodes
+                            }
+                        }
+
+                    }
+
+                }
+
+                if(!nodesToBeImported.isEmpty()) {
+                    MoonshotClient client = new MoonshotClient(moonshotChassis.getUsername(), cmd.getPassword(), moonshotChassis.getUrl(), "https", 443);
+                    //Persist Moonshot nodes
+                    List<MoonshotNodeVO> moonshotNodes = persistMoonshotNodes(nodesToBeImported, moonshotChassis.getId(), client);
+                    //Create corresponding hosts
+                    createHosts(moonshotNodes, cmd.getHostTag(), String.valueOf(moonshotChassis.getClusterId()), moonshotChassis.getUrl(), moonshotChassis.getUsername(), cmd.getPassword());
+                }
+
+            } else {
+                s_logger.debug(String.format("No new nodes found in chassis with url %s", moonshotChassis.getUrl()));
+            }
+        } catch (ConfigurationException e) {
+            throw new CloudRuntimeException(e);
+        }
+
+
+        MoonshotChassisResponse resp = new MoonshotChassisResponse();
+        resp.setUuid(moonshotChassis.getUuid());
+        resp.setName(moonshotChassis.getName());
+        resp.setUrl(moonshotChassis.getUrl());
+
+        return resp;
+    }
+
+    @Override
     public MoonshotChassisResponse addMoonshotChassis(AddMoonshotChassisCmd cmd) {
         s_logger.debug("API: addMoonshotChassis");
+
+        MoonshotChassisVO moonshotChassis = _moonshotChassisDao.findByUrl(cmd.getUrl());
+
+        if(moonshotChassis != null) {
+            throw new CloudRuntimeException(String.format("Moonshot chassis with url: %s already exists", cmd.getUrl()));
+        }
+
+        URI uri = null;
+
+        try {
+            uri = new URI(cmd.getUrl());
+        } catch (URISyntaxException e1) {
+            throw new CloudRuntimeException("Error in parsing url", e1);
+        }
+
+        MoonshotClient moonshotClient = null;
+        try {
+            moonshotClient = new MoonshotClient(cmd.getUsername(), cmd.getPassword(), uri.getHost(), "https", 443);
+        } catch (ConfigurationException e) {
+            throw new CloudRuntimeException("Could not configure Moonshot Client", e);
+        }
+
+        List<Node> nodes = moonshotClient.getAllNodes();
+
+        if(nodes == null || nodes.isEmpty()) {
+            throw new CloudRuntimeException("No nodes found on the chassis, please make sure you have at least one cartridge while adding");
+        }
+
         MoonshotChassisVO moonshotChassisVO = new MoonshotChassisVO();
         moonshotChassisVO.setName(cmd.getName());
         moonshotChassisVO.setUsername(cmd.getUsername());
         moonshotChassisVO.setUrl(cmd.getUrl());
+        moonshotChassisVO.setClusterId(Long.valueOf(cmd.getClusterId()));
 
         moonshotChassisVO = _moonshotChassisDao.persist(moonshotChassisVO);
         s_logger.debug("Moonshot chassis id:" + moonshotChassisVO.getId());
 
         List<MoonshotNodeVO> moonshotNodes = new ArrayList<MoonshotNodeVO>();
-        if(Boolean.valueOf(cmd.getImportNodes())) {
-            s_logger.debug("Importing nodes");
-            moonshotNodes = importMoonshotNodes(cmd, moonshotChassisVO.getId());
+
+        moonshotNodes = persistMoonshotNodes(nodes, moonshotChassisVO.getId(), moonshotClient);
+
+        if(Boolean.valueOf(cmd.getAddHosts())) {
+            s_logger.debug("Creating hosts");
             if(moonshotNodes != null && !moonshotNodes.isEmpty()) {
-                s_logger.debug("Total Nodes" + moonshotNodes.size());
-            } else {
-                s_logger.debug("No node is discovered");
-            }
-
-            if(Boolean.valueOf(cmd.getAddHosts())) {
-                s_logger.debug("Creating hosts");
-                if(moonshotNodes != null && !moonshotNodes.isEmpty()) {
-                    List<HostVO> hosts = createHosts(cmd, moonshotNodes);
-                    if(hosts != null && !hosts.isEmpty()) {
-                        s_logger.debug("Total Hosts" + hosts.size());
-                    } else {
-                        s_logger.debug("No host is discovered");
-                    }
+                List<HostVO> hosts = createHosts(moonshotNodes, cmd.getHostTag(), cmd.getClusterId(), cmd.getUrl(), cmd.getUsername(), cmd.getPassword());
+                if(hosts != null && !hosts.isEmpty()) {
+                    s_logger.debug("Total Hosts" + hosts.size());
+                } else {
+                    s_logger.debug("No host is discovered");
                 }
-            } else {
-                s_logger.debug("Not creating hosts, as false is passed in command");
             }
-
         } else {
-            s_logger.debug("Not importing nodes, as false is passed in command");
+            s_logger.debug("Not creating hosts, as false is passed in command");
         }
-
-
 
         MoonshotChassisResponse resp = new MoonshotChassisResponse();
         resp.setUuid(moonshotChassisVO.getUuid());
@@ -235,28 +323,13 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
         return resp;
     }
 
-    private List<MoonshotNodeVO> importMoonshotNodes(AddMoonshotChassisCmd cmd, long chassisId) {
-        URI uri = null;
-        try {
-            uri = new URI(cmd.getUrl());
-        } catch (URISyntaxException e1) {
-            s_logger.error("Error in parsing url", e1);
-        }
-
-        MoonshotClient moonshotClient = null;
-        try {
-            //moonshotClient = new MoonshotClient(cmd.getUsername(), cmd.getPassword(), uri.getHost(), uri.getScheme(), uri.getPort());
-            moonshotClient = new MoonshotClient(cmd.getUsername(), cmd.getPassword(), uri.getHost(), "https", 443);
-        } catch (ConfigurationException e) {
-            s_logger.error("Could not configure Moonshot Client", e);
-        }
+    private List<MoonshotNodeVO> persistMoonshotNodes(List<Node> nodes, long chassisId, MoonshotClient client) {
         List<MoonshotNodeVO> moonshotNodes = new ArrayList<MoonshotNodeVO>();
-        List<Node> nodes = moonshotClient.getAllNodes();
         int mbsInGbs = 1024;
         if(nodes != null && !nodes.isEmpty()) {
             for(Node n : nodes) {
                 s_logger.debug("Processing node: " + n.getMac()[0] + " " + n.getMac()[1] + " " + n.getShortName());
-                Node fullNode = moonshotClient.getNode("c" + n.getCartridge() + "n" + n.getNode()); //getAllNode does not give all the data!
+                Node fullNode = client.getNode(n.getShortName()); //getAllNode does not give all the data!
                 MoonshotNodeVO moonshotNode = new MoonshotNodeVO();
                 moonshotNode.setMoonshotChassisId(chassisId);
                 moonshotNode.setCartridge(String.valueOf(n.getCartridge()));
@@ -273,11 +346,10 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
         } else {
             s_logger.debug("No Moonshot nodes found!");
         }
-
         return moonshotNodes;
     }
 
-    private List<HostVO> createHosts(AddMoonshotChassisCmd cmd, List<MoonshotNodeVO> moonshotNodes) {
+    private List<HostVO> createHosts(List<MoonshotNodeVO> moonshotNodes, String hostTag, String clusterId, String url, String username, String password) {
         List<HostVO> hosts = new ArrayList<HostVO>();
         for(MoonshotNodeVO node : moonshotNodes) {
             String cartridgeNumber = node.getCartridge();
@@ -289,16 +361,17 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
             params.put("cpuspeed", String.valueOf(node.getMaxClockSpeed()));
             params.put("cpunumber", String.valueOf(node.getNoOfCores()));
             params.put("memory", String.valueOf(node.getMemory()));
-            params.put("cartridgeNumber", cartridgeNumber);
-            params.put("nodeNumber", nodeNumber);
+            //params.put("cartridgeNumber", cartridgeNumber);
+            //params.put("nodeNumber", nodeNumber);
+            params.put(BaremetalManager.CartridgeNodeLocation, node.getShortName());
             params.put(ApiConstants.BAREMETAL_PROVIDER, BaremetalProvider.MOONSHOT.toString());
             List<String> tags = new ArrayList<String>();
-            tags.add(cmd.getHostTag());
-            ClusterVO clusterVO =  _clusterDao.findById(Long.valueOf(cmd.getClusterId()));
+            tags.add(hostTag);
+            ClusterVO clusterVO =  _clusterDao.findById(Long.valueOf(clusterId));
 
             try {
                 //String url = cmd.getUrl().replace("https", "http");
-                List<HostVO> discoveredHosts = _resourceManager.discoverHostsFull(clusterVO.getDataCenterId(), clusterVO.getPodId(), clusterVO.getId(), null, cmd.getUrl(), cmd.getUsername(), cmd.getPassword(), "BareMetal", tags, params, false);
+                List<HostVO> discoveredHosts = _resourceManager.discoverHostsFull(clusterVO.getDataCenterId(), clusterVO.getPodId(), clusterVO.getId(), null, url, username, password, "BareMetal", tags, params, false);
                 if(discoveredHosts != null && !discoveredHosts.isEmpty()) {
                     node.setHostId(discoveredHosts.get(0).getId());
                     _moonshotNodeDao.persist(node);

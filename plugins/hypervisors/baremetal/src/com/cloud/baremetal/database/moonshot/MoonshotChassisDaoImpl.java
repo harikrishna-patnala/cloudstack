@@ -17,12 +17,35 @@
 //
 package com.cloud.baremetal.database.moonshot;
 
-import javax.ejb.Local;
-
 import com.cloud.utils.db.DB;
 import com.cloud.utils.db.GenericDaoBase;
+import com.cloud.utils.db.SearchBuilder;
+import com.cloud.utils.db.SearchCriteria;
+
+import javax.annotation.PostConstruct;
+import javax.ejb.Local;
 
 @Local(value = {MoonshotChassisDao.class})
 @DB()
 public class MoonshotChassisDaoImpl extends GenericDaoBase<MoonshotChassisVO, Long> implements MoonshotChassisDao {
+
+    protected SearchBuilder<MoonshotChassisVO> urlSearch;
+
+    public MoonshotChassisDaoImpl() {
+
+    }
+
+    @PostConstruct
+    protected void init() {
+        urlSearch = createSearchBuilder();
+        urlSearch.and("url", urlSearch.entity().getUrl(), SearchCriteria.Op.EQ);
+        urlSearch.done();
+    }
+
+    @Override
+    public MoonshotChassisVO findByUrl(String url) {
+        SearchCriteria<MoonshotChassisVO> sc = urlSearch.create();
+        sc.setParameters("url", url);
+        return findOneBy(sc);
+    }
 }

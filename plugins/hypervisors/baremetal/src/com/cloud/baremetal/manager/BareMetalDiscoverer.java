@@ -317,7 +317,7 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
 
             String guid = UUID.nameUUIDFromBytes(mac.getBytes()).toString();
             //MoonshotNodeVO moonshotNodeVO = _moonshotNodeDao.findByMacAddress(mac);
-            String cartridgeNodeString = "C" + (String)params.get("cartridgeNumber") + "N" + (String)params.get("nodeNumber");
+            String cartridgeNodeString = (String) params.get(BaremetalManager.CartridgeNodeLocation);
             s_logger.info("Found Moonshot node:" + cartridgeNodeString);
 
             //MoonshotClient client = new MoonshotClient(username, password, ipmiIp, url.getScheme(), url.getPort());
@@ -355,7 +355,7 @@ public class BareMetalDiscoverer extends DiscovererBase implements Discoverer, R
             String cpuCapacity = (String)params.get(ApiConstants.CPU_SPEED);
             String cpuNum = (String)params.get(ApiConstants.CPU_NUMBER);
 
-            params.put(BaremetalManager.CartridgeNodeLocation, cartridgeNodeString);
+            //params.put(BaremetalManager.CartridgeNodeLocation, cartridgeNodeString);
 
             resource.configure("Bare Metal Agent", params);
 

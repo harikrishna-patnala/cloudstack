@@ -49,6 +49,9 @@ public class MoonshotChassisVO implements InternalIdentity, Identity {
     @Column(name = "username")
     private String username;
 
+    @Column(name = "cluster_id")
+    private long clusterId;
+
     @Override
     public long getId() {
         return id;
@@ -89,5 +92,13 @@ public class MoonshotChassisVO implements InternalIdentity, Identity {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public long getClusterId() {
+        return clusterId;
+    }
+
+    public void setClusterId(long clusterId) {
+        this.clusterId = clusterId;
     }
 }

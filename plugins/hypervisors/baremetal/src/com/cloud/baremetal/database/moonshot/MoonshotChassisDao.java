@@ -20,4 +20,6 @@ package com.cloud.baremetal.database.moonshot;
 import com.cloud.utils.db.GenericDao;
 
 public interface MoonshotChassisDao extends GenericDao<MoonshotChassisVO, Long> {
+
+    public MoonshotChassisVO findByUrl(String url);
 }

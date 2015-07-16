@@ -159,5 +159,9 @@ public class MoonshotNodeVO implements InternalIdentity, Identity {
         this.maxClockSpeed = maxClockSpeed;
     }
 
+    public String getShortName() {
+        return "C" + this.cartridge + "N" + this.node;
+    }
+
 
 }

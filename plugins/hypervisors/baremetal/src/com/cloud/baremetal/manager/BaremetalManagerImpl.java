@@ -221,11 +221,11 @@ public class BaremetalManagerImpl extends ManagerBase implements BaremetalManage
                             DetailVO hostDetail = detailsDao.findDetail(moonshotNodeVo.getHostId(), BaremetalManager.CartridgeNodeLocation);
                             if(hostDetail != null) {
                                 hostDetail.setValue(node.getShortName());
-                                detailsDao.persist(hostDetail); //update host details
+                                detailsDao.update(hostDetail.getId(), hostDetail); //update host details
 
                                 moonshotNodeVo.setCartridge(String.valueOf(node.getCartridge()));
                                 moonshotNodeVo.setNode(String.valueOf(node.getNode()));
-                                _moonshotNodeDao.persist(moonshotNodeVo); //update moonshot nodes
+                                _moonshotNodeDao.update(moonshotNodeVo.getId(), moonshotNodeVo); //update moonshot nodes
                             }
                         }
 

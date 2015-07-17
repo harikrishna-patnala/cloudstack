@@ -1166,6 +1166,10 @@
                                     if ('templates' in args.context && args.context.templates[0].hypervisor != 'XenServer') {
                                         hiddenFields.push('xenserverToolsVersion61plus');
                                     }
+
+                                    if ('templates' in args.context && args.context.templates[0].format != 'BAREMETAL') {
+                                        hiddenFields.push('url');
+                                    }
                                                                       
                                     if ('templates' in args.context && args.context.templates[0].ostypeid != undefined) {
                                     	var ostypeObjs;
@@ -1206,6 +1210,10 @@
                                 }, { 
                                     hypervisor: {
                                         label: 'label.hypervisor'
+                                    },
+                                    url: {
+                                        label: 'label.url',
+                                        isCopyPaste: true
                                     },
                                     xenserverToolsVersion61plus: {
                                         label: 'label.xenserver.tools.version.61.plus',

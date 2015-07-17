@@ -130,6 +130,7 @@ public class TemplateJoinDaoImpl extends GenericDaoBase<TemplateJoinVO, Long> im
         if (template.getFormat() == Storage.ImageFormat.BAREMETAL) {
             // for baremetal template, we didn't download, but is ready to use.
             templateResponse.setReady(true);
+            templateResponse.setUrl(template.getUrl());
         } else {
             templateResponse.setReady(template.getState() == ObjectInDataStoreStateMachine.State.Ready);
         }

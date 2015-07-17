@@ -147,8 +147,7 @@ public class BaremetalUserdataElement extends AdapterBase implements NetworkElem
 
     @Override
     public boolean saveUserData(Network network, NicProfile nic, VirtualMachineProfile vm) throws ResourceUnavailableException {
-        // TODO Auto-generated method stub
-        return false;
+        return pxeMgr.addUserData(nic, vm, null); //TODO: confirm
     }
 
     @Override

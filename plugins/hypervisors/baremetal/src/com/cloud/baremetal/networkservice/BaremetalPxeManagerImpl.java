@@ -222,8 +222,7 @@ public class BaremetalPxeManagerImpl extends ManagerBase implements BaremetalPxe
         boolean isWindows = _guestOsCategoryDao.findById(_guestOsDao.findById(vm.getGuestOSId()).getCategoryId()).getName().equalsIgnoreCase("Windows");
         cmd.setWindows(isWindows);
         if(isWindows) {
-            //cmd.setVmMacAddress(dest.getHost().getPrivateMacAddress()); //TODO - confirm whether private macaddress is right thing to add here.
-            cmd.setVmMacAddress(nic.getMacAddress().replaceAll(":", ""));
+            cmd.setVmMacAddress(dest.getHost().getPublicMacAddress().replaceAll(":", ""));
         }
 
         List<PhysicalNetworkVO> phys = _phynwDao.listByZone(vm.getDataCenterId());
